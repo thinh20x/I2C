@@ -41,16 +41,51 @@ state_t current_state, next_state;
         if(~rst_n)begin
             count<=0;
             tick_16x<=1'b0;
-            
+            phase_reg<=4'b0;
         end else if (count>=MAX_COUNT[COUNT_WIDTH-1:0]-1) begin
+            count<=0;
             tick_16x<=1'b1;
-           count<=0;
+            phase_reg <= phase_reg + 1; // Xoay vòng 0->1->2->3
+           
         end else begin
             count<=count + 1'b1;
             tick_16x<=1'b0;
         end
     end
     // 2. FSM điều khiển các phase
+    always @(posedge clk or negedge rst_n)begin
+        if(~rst)begin
+            current_state<= idle;
+            
+        end else begin
+            case (current_state)
+                IDLE:begin
+                end
+                
+                START:begin
+                end
+                
+                SEND_ADDR:begin
+                end
+                
+                ACK_ADDR:begin
+                end
+                
+                WRITE_DATA:begin
+                end
+                
+                READ_DATA:begin
+                end
+                
+                ACK_DATA:begin
+                end
+                
+                STOP:begin
+                end
+                
+                default: next_state<=idle;
+        end
+    end
     // 3. Logic xử lý SDA (Tri-state)
 // Cách điều khiển chân SDA đúng chuẩn
 assign sda = (sda_out_en && !sda_out) ? 1'b0 : 1'bz;
