@@ -4,8 +4,10 @@ module i2c_master #(
 )(
     input  logic        clk,
     input  logic        rst_n,
+    input  logic        start,       // Thêm tín hiệu bắt đầu
     input  logic [6:0]  device_addr,
     input  logic [7:0]  data_in,
+    input  logic        rw,          // 0: Write, 1: Read 
     
     output logic        busy,
     output logic        ready,
@@ -25,15 +27,15 @@ typedef enum logic [3:0] {
     STOP
 } state_t;
 state_t current_state, next_state;
-    //dùng 2 cấp đếm (Count -> Tick -> Phase)
-   // localparam int MAX_COUNT = SYS_CLK_FREQ / (I2C_FREQ * 16);//~~7.5
-    localparam int MAX_COUNT = 8;
+    //dùng 2 cấp đếm (Count -> Tick -> Phase)// Cách mới (làm tròn lên 8)để tần số bé hơn hơn an toàn
+localparam int MAX_COUNT = (SYS_CLK_FREQ + (I2C_FREQ * 16) - 1) / (I2C_FREQ * 16);
+  
 
 
     localparam int COUNT_WIDTH = $clog2(MAX_COUNT);
     logic [COUNT_WIDTH-1:0] count;
         
-    logic [3:0] phase_reg;
+    logic [3:0] phase_cnt;
     logic tick_16x;
     
     // 1. Clock divider để tạo nhịp SCL
@@ -52,10 +54,26 @@ state_t current_state, next_state;
             tick_16x<=1'b0;
         end
     end
+
+    // --- CÁC THANH GHI LOGIC ---
+    logic [2:0]  bit_cnt;    // Đếm bit 0-7
+    logic [1:0]  phase_cnt;  // Đếm pha 0-3 trong 1 chu kỳ SCL
+    logic [8:0]  shift_reg;  // Chứa Addr + RW hoặc Data
+    logic        sda_out, sda_out_en; // Logic điều khiển Tri-state
+    
     // 2. FSM điều khiển các phase
     always @(posedge clk or negedge rst_n)begin
         if(~rst)begin
-            current_state<= idle;
+            current_state <= IDLE;
+            phase_cnt     <= 0;
+            bit_cnt       <= 0;
+            shift_reg     <= 0;
+            sda_out       <= 1;
+            sda_out_en    <= 0; // Thả nổi SDA (High-Z)
+            scl           <= 1; // Idle SCL = 1
+            busy          <= 0;
+            ready         <= 0;
+            ack_error     <= 0;
             
         end else begin
             case (current_state)
@@ -87,9 +105,13 @@ state_t current_state, next_state;
         end
     end
     // 3. Logic xử lý SDA (Tri-state)
-// Cách điều khiển chân SDA đúng chuẩn
-assign sda = (sda_out_en && !sda_out) ? 1'b0 : 1'bz;
-assign sda_in = sda;
+
+// Logic Tri-state
+    assign sda = (sda_out_en && !sda_out) ? 1'b0 : 1'bz;
+    
+    // Input SDA để đọc ACK (Debounce/Sync nếu cần, ở đây làm đơn giản)
+    logic sda_in_sync;
+    assign sda_in_sync = sda;
     
     // Gợi ý: Hãy dùng một biến đếm (counter) để xác định vị trí bit 
     // trong quá trình dịch chuyển (Shift register) từ 7 xuống 0.
