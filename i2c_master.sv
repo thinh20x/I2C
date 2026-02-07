@@ -1,4 +1,4 @@
-module i2c_master #(
+hmodule i2c_master #(
     parameter SYS_CLK_FREQ = 12_000_000,
     parameter I2C_FREQ     = 100_000
 )(
